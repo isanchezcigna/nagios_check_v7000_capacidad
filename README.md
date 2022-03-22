@@ -1,0 +1,1 @@
+# nagios_check_v7000_capacidad
