@@ -1,0 +1,68 @@
+#!/bin/bash
+exitCode=0
+while getopts 'M:I:h' OPT; do
+  case $OPT in
+    M)  storage=$OPTARG;;
+    I)  num_pool=$OPTARG;;
+    h)  hlp="yes";;
+    *)  unknown="yes";;
+  esac
+done
+HELP="
+    Check IBM Storwize v7000 throght ssh (GPL licence)
+    usage: $0 [ -M value -h ]
+	syntax:
+            -M --> IP Address    
+            -I --> numero de pool            
+            -h --> Print This Help Screen
+    Note :
+    This check use ssh protocoll.
+"
+if [ "$hlp" = "yes" -o $# -lt 1 ]; then
+        echo "$HELP"
+        exit 0
+fi
+tmp_file=/tmp/v7000_capacidad$storage.tmp     
+fila=$(($n_disk + 1))
+$ssh $user@$storage $query "-bytes" |sed '1d' > $tmp_file
+estado=$(cat $tmp_file |sed -n "1 p" | awk '{print $1}')
+if [ -z $estado ]; then
+	exitCode=2
+	echo -ne "Error Consulta\n"
+else
+	sum=0
+	sum2=0
+	outputMess=""
+	zum2=/tmp/pruebas_capa/allocated
+	zum=/tmp/pruebas_capa/storage
+	zum3=/tmp/pruebas_capa/zum3_allocated$storage
+	zum4=/tmp/pruebas_capa/zum_allocated$storage
+	inv=/tmp/pruebas_capa/inv_storage_tests.txt
+	var=TB
+	for (( i=1; i<=$num_pool; i++ ))
+	do
+	size_pool=$(cat $tmp_file | sed -n "$i p" | awk '{print $11}' )
+	sum=`echo "scale=2;$size_pool+$sum" | bc -l`
+	done
+	allocated=`echo "scale=3;$sum/(1024*1024*1024*1024)" | bc -l`
+	if [ -z "$allocated" ]; then
+		echo -ne "Error, no se pudo obtener la informacion"
+	else
+		linea=$(cat $zum | grep $storage | head -1 |awk '{print $1}' )
+		remplaza=$(cat $zum2 | sed -n "$linea p"  |awk '{print $1}' )
+		cat $zum2 |sed "$linea s/$remplaza/$allocated/g" > $zum3
+		mv -f $zum3 $zum2
+		remplazainv=$(cat $inv | sed -n "$linea p"  |awk '{print $11}' )
+		cat $inv |sed "$linea s/$remplazainv/$allocated$var/g" > $zum4
+		mv -f $zum4 $inv
+	fi
+	echo -ne "$remplaza\n"
+	echo -ne "Capacidad Allocated:$allocated$var\n|'Capacity_Allocated'=$allocated$var\n"
+fi
+rm -rf $tmp_file
+rm -rf $zum
+rm -rf $zum2
+rm -rf $zum3
+rm -rf $zum4
+rm -rf $inv
+exit $exitCode
